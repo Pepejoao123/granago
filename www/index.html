@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<title>GranaGo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+<script src="config.js" onerror="window.GRANAGO_CONFIG={}"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><img src="icons/icon.svg" alt=""><b>Grana<span>Go</span></b></div>
+  <div class="month" id="monthNav">
+    <button class="ic" data-m="-1" aria-label="Mês anterior">‹</button>
+    <span id="monthLbl">—</span>
+    <button class="ic" data-m="1" aria-label="Próximo mês">›</button>
+  </div>
+  <button class="ic" id="btnSettings" aria-label="Ajustes">⚙️</button>
+</header>
+
+<main>
+  <!-- ================= INÍCIO ================= -->
+  <section class="view" id="v-home">
+    <div class="hero">
+      <small>Saldo do mês</small>
+      <div class="big" id="hBal">R$ 0,00</div>
+      <div class="pair">
+        <div class="pill in"><small>Receitas</small><b id="hIn">R$ 0,00</b></div>
+        <div class="pill out"><small>Despesas</small><b id="hOut">R$ 0,00</b></div>
+      </div>
+    </div>
+
+    <div class="quick card">
+      <div class="qrow">
+        <textarea id="qText" rows="1" placeholder="Ex.: gastei 42,90 no iFood no Nubank"></textarea>
+        <button class="ic round" id="qMic" aria-label="Lançar por áudio">🎙️</button>
+        <button class="ic round" id="qCam" aria-label="Foto da nota">📷</button>
+        <button class="ic round accent" id="qSend" aria-label="Interpretar">➤</button>
+      </div>
+      <div class="qstatus" id="qStatus">Escreva, fale ou fotografe a nota — eu preencho valor, categoria e forma de pagamento.</div>
+    </div>
+
+    <div class="sec-h"><h3>Gastos por categoria</h3><a data-go="charts">ver gráficos</a></div>
+    <div class="card" id="hCats"></div>
+
+    <div class="sec-h"><h3>Cartões</h3><a data-go="cards">gerenciar</a></div>
+    <div class="hscroll" id="hCards"></div>
+
+    <div class="sec-h"><h3>Últimos lançamentos</h3><a data-go="tx">ver todos</a></div>
+    <div class="card list" id="hLast"></div>
+  </section>
+
+  <!-- ================= LANÇAMENTOS ================= -->
+  <section class="view" id="v-tx" hidden>
+    <div class="search"><input id="txSearch" type="search" placeholder="Buscar descrição, categoria…"></div>
+    <div class="chips" id="txFilter">
+      <button class="chip on" data-f="all">Todos</button>
+      <button class="chip" data-f="despesa">Despesas</button>
+      <button class="chip" data-f="receita">Receitas</button>
+      <button class="chip" data-f="credito">Crédito</button>
+      <button class="chip" data-f="pix">Pix</button>
+    </div>
+    <div class="sumline" id="txSum"></div>
+    <div id="txList"></div>
+  </section>
+
+  <!-- ================= CARTÕES E BANCOS ================= -->
+  <section class="view" id="v-cards" hidden>
+    <div class="sec-h"><h3>Bancos e cartões</h3><a id="btnAddBank">+ banco</a></div>
+    <div id="bankList"></div>
+  </section>
+
+  <!-- ================= GRÁFICOS ================= -->
+  <section class="view" id="v-charts" hidden>
+    <div class="card">
+      <div class="seg" id="chType"><button class="on" data-t="despesa">Despesas</button><button data-t="receita">Receitas</button></div>
+      <div id="chDonut"></div>
+    </div>
+    <div class="sec-h"><h3>Últimos 6 meses</h3></div>
+    <div class="card" id="chBars"></div>
+    <div class="sec-h"><h3>Forma de pagamento</h3></div>
+    <div class="card" id="chMethods"></div>
+    <div class="sec-h"><h3>Por cartão / banco</h3></div>
+    <div class="card" id="chCards"></div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-go="home" class="on"><i>🏠</i><span>Início</span></button>
+  <button data-go="tx"><i>📋</i><span>Lançamentos</span></button>
+  <button class="fab" id="fab" aria-label="Novo lançamento">＋</button>
+  <button data-go="cards"><i>💳</i><span>Cartões</span></button>
+  <button data-go="charts"><i>📊</i><span>Gráficos</span></button>
+</nav>
+
+<input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+<input type="file" id="fileGal" accept="image/*,application/pdf" hidden>
+<input type="file" id="fileImport" accept="application/json" hidden>
+<div class="toast" id="toast"></div>
+
+<!-- ============ Novo: escolher modo ============ -->
+<dialog id="dlgNew" class="sheet"><div class="inner">
+  <div class="grab"></div>
+  <h2>Novo lançamento</h2>
+  <div class="modes">
+    <button data-mode="despesa"><i>💸</i><b>Despesa</b><small>manual</small></button>
+    <button data-mode="receita"><i>💰</i><b>Receita</b><small>manual</small></button>
+    <button data-mode="msg"><i>💬</i><b>Mensagem</b><small>escreva o gasto</small></button>
+    <button data-mode="audio"><i>🎙️</i><b>Áudio</b><small>fale o gasto</small></button>
+    <button data-mode="cam"><i>📷</i><b>Foto da nota</b><small>câmera</small></button>
+    <button data-mode="gal"><i>🖼️</i><b>Galeria</b><small>nota/comprovante</small></button>
+  </div>
+  <button class="btn ghost full" data-close>Cancelar</button>
+</div></dialog>
+
+<!-- ============ Assistente (mensagem / áudio / foto) ============ -->
+<dialog id="dlgAI" class="sheet"><div class="inner">
+  <div class="grab"></div>
+  <h2 id="aiTitle">Conte o que gastou</h2>
+  <img id="aiImg" class="aiimg" alt="" hidden>
+  <textarea id="aiText" rows="3" placeholder="Ex.: almoço 38 reais no débito do Itaú&#10;uber 23,50 no pix&#10;tênis 600 em 3x no cartão Nubank&#10;recebi 2500 de salário"></textarea>
+  <div class="mic-row">
+    <button class="btn ghost" id="aiMic">🎙️ Falar</button>
+    <button class="btn ghost" id="aiCam">📷 Foto</button>
+    <button class="btn ghost" id="aiGal">🖼️ Galeria</button>
+  </div>
+  <div class="wave" id="aiWave" hidden><span></span><span></span><span></span><span></span><span></span><em id="aiRecT">0:00</em></div>
+  <div class="qstatus" id="aiStatus"></div>
+  <div class="row2">
+    <button class="btn ghost" data-close>Cancelar</button>
+    <button class="btn" id="aiGo">Interpretar</button>
+  </div>
+</div></dialog>
+
+<!-- ============ Revisão de vários lançamentos ============ -->
+<dialog id="dlgReview" class="sheet"><div class="inner">
+  <div class="grab"></div>
+  <h2>Confira os lançamentos</h2>
+  <div class="qstatus" id="rvNote"></div>
+  <div id="rvList" class="list"></div>
+  <div class="row2">
+    <button class="btn ghost" data-close>Cancelar</button>
+    <button class="btn" id="rvSave">Salvar todos</button>
+  </div>
+</div></dialog>
+
+<!-- ============ Formulário de lançamento ============ -->
+<dialog id="dlgTx" class="sheet"><form class="inner" id="txForm" novalidate>
+  <div class="grab"></div>
+  <div class="seg" id="txType"><button type="button" data-t="despesa" class="on">Despesa</button><button type="button" data-t="receita">Receita</button></div>
+  <label class="amount"><span>R$</span><input id="fAmount" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+  <label class="fld"><small>Descrição</small><input id="fDesc" placeholder="Ex.: Mercado Dia" autocomplete="off"></label>
+  <div class="fld"><small>Categoria</small><div class="catgrid" id="fCats"></div></div>
+  <div class="fld"><small>Forma de pagamento</small>
+    <div class="chips wrap" id="fMethod">
+      <button type="button" class="chip" data-v="pix">⚡ Pix</button>
+      <button type="button" class="chip" data-v="credito">💳 Crédito</button>
+      <button type="button" class="chip" data-v="debito">🏦 Débito</button>
+      <button type="button" class="chip" data-v="dinheiro">💵 Dinheiro</button>
+      <button type="button" class="chip" data-v="boleto">🧾 Boleto</button>
+      <button type="button" class="chip" data-v="outro">• Outro</button>
+    </div>
+  </div>
+  <label class="fld" id="fCardWrap" hidden><small>Cartão</small><select id="fCard"></select></label>
+  <label class="fld" id="fBankWrap" hidden><small>Banco / conta</small><select id="fBank"></select></label>
+  <div class="grid2">
+    <label class="fld"><small>Data</small><input type="date" id="fDate"></label>
+    <label class="fld" id="fInstWrap" hidden><small>Parcelas</small><select id="fInst"></select></label>
+  </div>
+  <label class="fld"><small>Observação</small><input id="fNote" placeholder="opcional" autocomplete="off"></label>
+  <img id="fImg" class="aiimg small" alt="" hidden>
+  <div class="row2">
+    <button type="button" class="btn danger ghost" id="txDel" hidden>Excluir</button>
+    <button type="button" class="btn ghost" data-close>Cancelar</button>
+    <button type="submit" class="btn">Salvar</button>
+  </div>
+</form></dialog>
+
+<!-- ============ Banco ============ -->
+<dialog id="dlgBank" class="sheet"><form class="inner" id="bankForm" novalidate>
+  <div class="grab"></div>
+  <h2 id="bankTitle">Novo banco</h2>
+  <div class="fld"><small>Escolha o banco (identidade visual)</small><div class="presets" id="bPresets"></div></div>
+  <label class="fld"><small>Nome</small><input id="bName" placeholder="Ex.: Nubank" autocomplete="off"></label>
+  <div class="fld"><small>Estilo do cartão</small><div class="styles" id="bStyles"></div></div>
+  <div class="grid2">
+    <label class="fld"><small>Cor 1</small><input type="color" id="bC1"></label>
+    <label class="fld"><small>Cor 2</small><input type="color" id="bC2"></label>
+  </div>
+  <div class="fld"><small>Prévia</small><div id="bPreview"></div></div>
+  <div class="row2">
+    <button type="button" class="btn danger ghost" id="bankDel" hidden>Excluir</button>
+    <button type="button" class="btn ghost" data-close>Cancelar</button>
+    <button type="submit" class="btn">Salvar</button>
+  </div>
+</form></dialog>
+
+<!-- ============ Cartão ============ -->
+<dialog id="dlgCard" class="sheet"><form class="inner" id="cardForm" novalidate>
+  <div class="grab"></div>
+  <h2 id="cardTitle">Novo cartão</h2>
+  <label class="fld"><small>Banco</small><select id="cBank"></select></label>
+  <label class="fld"><small>Apelido do cartão</small><input id="cName" placeholder="Ex.: Roxinho, Platinum" autocomplete="off"></label>
+  <div class="grid2">
+    <label class="fld"><small>Bandeira</small><select id="cBrand"><option>Mastercard</option><option>Visa</option><option>Elo</option><option>Amex</option><option>Hipercard</option></select></label>
+    <label class="fld"><small>Final (4 dígitos)</small><input id="cFinal" inputmode="numeric" maxlength="4" placeholder="opcional"></label>
+  </div>
+  <label class="fld"><small>Limite total</small><input id="cLimit" inputmode="decimal" placeholder="R$ 0,00"></label>
+  <div class="grid2">
+    <label class="fld"><small>Dia do fechamento</small><input id="cClose" type="number" min="1" max="31" placeholder="ex.: 3"></label>
+    <label class="fld"><small>Dia do vencimento</small><input id="cDue" type="number" min="1" max="31" placeholder="ex.: 10"></label>
+  </div>
+  <div class="fld"><small>Prévia</small><div id="cPreview"></div></div>
+  <div class="row2">
+    <button type="button" class="btn danger ghost" id="cardDel" hidden>Excluir</button>
+    <button type="button" class="btn ghost" data-close>Cancelar</button>
+    <button type="submit" class="btn">Salvar</button>
+  </div>
+</form></dialog>
+
+<!-- ============ Faturas do cartão ============ -->
+<dialog id="dlgInv" class="sheet"><div class="inner">
+  <div class="grab"></div>
+  <div id="invCard"></div>
+  <div class="invnav"><button class="ic" id="invPrev">‹</button><div id="invHead"></div><button class="ic" id="invNext">›</button></div>
+  <div id="invList" class="list"></div>
+  <div class="row2">
+    <button class="btn ghost" id="invEdit">Editar cartão</button>
+    <button class="btn" id="invPay">Marcar como paga</button>
+  </div>
+</div></dialog>
+
+<!-- ============ Ajustes ============ -->
+<dialog id="dlgSet" class="sheet"><div class="inner">
+  <div class="grab"></div>
+  <h2>Ajustes</h2>
+  <div class="fld"><small>Compras no crédito entram no mês…</small>
+    <div class="seg" id="sMode"><button data-v="compra">da compra</button><button data-v="fatura">da fatura</button></div>
+  </div>
+  <label class="fld"><small>Chave da IA (Google Gemini) — opcional se já veio no build</small><input id="sKey" type="password" placeholder="AIza…" autocomplete="off"></label>
+  <div class="qstatus" id="sKeyInfo"></div>
+  <div class="fld"><small>Categorias</small><div id="sCats" class="list"></div>
+    <button class="btn ghost full" id="sAddCat">+ Nova categoria</button></div>
+  <div class="fld"><small>Backup</small>
+    <div class="row2"><button class="btn ghost" id="sExport">Exportar</button><button class="btn ghost" id="sImport">Importar</button></div></div>
+  <button class="btn danger ghost full" id="sReset">Apagar todos os dados</button>
+  <div class="ver" id="sVer"></div>
+  <button class="btn full" data-close>Fechar</button>
+</div></dialog>
+
+<!-- ============ Categoria ============ -->
+<dialog id="dlgCat" class="sheet"><form class="inner" id="catForm" novalidate>
+  <div class="grab"></div>
+  <h2 id="catTitle">Categoria</h2>
+  <div class="seg" id="catType"><button type="button" data-t="despesa" class="on">Despesa</button><button type="button" data-t="receita">Receita</button></div>
+  <div class="grid2">
+    <label class="fld"><small>Emoji</small><input id="catIcon" maxlength="4" placeholder="🍔"></label>
+    <label class="fld"><small>Cor</small><input type="color" id="catColor"></label>
+  </div>
+  <label class="fld"><small>Nome</small><input id="catName" autocomplete="off"></label>
+  <label class="fld"><small>Palavras-chave (ajudam a IA a escolher)</small><input id="catKw" placeholder="ifood, restaurante, lanche" autocomplete="off"></label>
+  <div class="row2">
+    <button type="button" class="btn danger ghost" id="catDel" hidden>Excluir</button>
+    <button type="button" class="btn ghost" data-close>Cancelar</button>
+    <button type="submit" class="btn">Salvar</button>
+  </div>
+</form></dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

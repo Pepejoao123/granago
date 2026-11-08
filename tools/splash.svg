@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2732" height="2732" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#000"/><g transform="translate(399.36 399.36) scale(0.22)">
+  <g fill="#fff">
+    <!-- moeda caindo -->
+    <circle cx="560" cy="250" r="62"/>
+    <!-- pernas -->
+    <rect x="335" y="640" width="78" height="135" rx="30"/>
+    <rect x="590" y="640" width="78" height="135" rx="30"/>
+    <!-- orelha -->
+    <path d="M395 395 L430 265 L520 352 Z" stroke="#fff" stroke-width="30" stroke-linejoin="round"/>
+    <!-- corpo -->
+    <ellipse cx="520" cy="540" rx="285" ry="215"/>
+    <!-- focinho -->
+    <rect x="745" y="470" width="95" height="120" rx="38"/>
+    <!-- rabinho -->
+    <path d="M245 520 C195 520 185 470 215 455 C240 445 250 475 228 485" fill="none" stroke="#fff" stroke-width="26" stroke-linecap="round"/>
+  </g>
+  <g fill="#000">
+    <!-- fenda do cofre -->
+    <rect x="470" y="355" width="150" height="30" rx="15"/>
+    <!-- olho -->
+    <circle cx="680" cy="470" r="24"/>
+    <!-- narinas -->
+    <ellipse cx="788" cy="512" rx="10" ry="16"/>
+    <ellipse cx="788" cy="550" rx="10" ry="16"/>
+  </g>
+  <!-- detalhe da moeda -->
+  <text x="560" y="275" font-family="DejaVu Sans, Arial" font-weight="bold" font-size="72" text-anchor="middle" fill="#000">$</text>
+</g></svg>
