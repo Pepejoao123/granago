@@ -1,0 +1,8 @@
+{
+  "appId": "com.granago.app",
+  "appName": "GranaGo",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#000000"
+  }
+}

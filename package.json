@@ -1,0 +1,21 @@
+{
+  "name": "granago",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GranaGo — controle financeiro: gastos, receitas, cartões, bancos e IA (foto, áudio e mensagem) — PWA + APK Android (Capacitor)",
+  "scripts": {
+    "serve": "npx --yes http-server www -p 8080 -c-1",
+    "android:init": "npx cap add android && npx capacitor-assets generate --android --assetPath assets && node scripts/patch-android.js",
+    "android:sync": "npx cap sync android",
+    "apk": "npx cap sync android && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.1",
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.0.0"
+  }
+}
