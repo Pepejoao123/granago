@@ -1,6 +1,6 @@
 // Service worker: app funcionando offline quando instalado como PWA (PC/celular pelo navegador)
-const CACHE = 'granago-v1';
-const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png'];
+const CACHE = 'granago-v2';
+const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './apps-script/Code.gs'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 // Network-first: versão nova quando online, cache quando offline. IA vai direto para a rede.

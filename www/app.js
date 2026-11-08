@@ -2,7 +2,7 @@
  * Dados salvos no aparelho (localStorage). IA: Google Gemini (opcional) + interpretador local.
  */
 'use strict';
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -71,7 +71,7 @@ const DEF_CATS = [
   ['receita', 'Vendas', '🏷️', '#F59E0B', 'venda vendi'],
   ['receita', 'Reembolso', '↩️', '#0EA5E9', 'reembolso estorno devolucao devolução'],
   ['receita', 'Outras receitas', '💰', '#10B981', 'presente pix recebido'],
-].map(([type, name, icon, color, kw]) => ({ id: uid(), type, name, icon, color, kw }));
+].map(([type, name, icon, color, kw]) => ({ id: 'c-' + norm(name).replace(/[^a-z0-9]+/g, '-'), type, name, icon, color, kw })); // id fixo: igual em todos os aparelhos (planilha)
 
 const METHODS = { pix: '⚡ Pix', credito: '💳 Crédito', debito: '🏦 Débito', dinheiro: '💵 Dinheiro', boleto: '🧾 Boleto', outro: '• Outro' };
 
@@ -84,11 +84,24 @@ function load() {
 }
 function migrate(s) {
   s.tx ||= []; s.banks ||= []; s.cards ||= []; s.paid ||= {};
-  s.cats ||= DEF_CATS;
-  s.settings ||= {}; s.settings.mode ||= 'compra'; s.settings.key ??= '';
+  s.cats ||= DEF_CATS.map(c => ({ ...c }));
+  s.dead ||= {};                                        // exclusões {id: quando} (para a planilha)
+  s.metaU ??= Object.keys(s.paid).length ? 1 : 0;       // última alteração de faturas pagas / modo
+  for (const k of ['tx', 'banks', 'cards', 'cats']) for (const r of s[k]) r.u ??= r.ts || 1; // data da última alteração
+  const st = s.settings ||= {}; st.mode ||= 'compra'; st.key ??= '';
+  st.rem = { on: true, noon: '12:00', night: '21:00', skip: false, ...(st.rem || {}) };
+  st.widgetTheme ||= 'dark';
+  st.sheet = { url: '', pass: '', ...(st.sheet || {}) };
   return s;
 }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Não consegui salvar no aparelho'); } }
+function persist() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Não consegui salvar no aparelho'); } }
+let chg = 0; // contador de alterações (sincronização com a planilha)
+function save() {
+  chg++; if (S.settings.sheet.url) S.settings.sheet.dirty = true;
+  persist(); afterChange();
+}
+const touch = o => { o.u = Date.now(); return o; };
+const kill = id => { if (id) S.dead[id] = Date.now(); };
 let curM = mKey(todayISO());
 const cat = id => S.cats.find(c => c.id === id) || { name: 'Sem categoria', icon: '❔', color: '#64748B' };
 const card = id => S.cards.find(c => c.id === id);
@@ -255,9 +268,9 @@ $('#chType').addEventListener('click', e => { const b = e.target.closest('[data-
 function donutSVG(parts, total, label) {
   const R = 70, C = 2 * Math.PI * R; let off = 0;
   const segs = parts.map(p => { const len = total ? p.v / total * C : 0; const s = `<circle r="${R}" cx="85" cy="85" fill="none" stroke="${p.color}" stroke-width="26" stroke-dasharray="${Math.max(0, len - 1.5)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 85 85)"/>`; off += len; return s; }).join('');
-  return `<svg class="donut" viewBox="0 0 170 170"><circle r="${R}" cx="85" cy="85" fill="none" stroke="#16181d" stroke-width="26"/>${segs}
-    <text x="85" y="80" text-anchor="middle" fill="#8a8f99" font-size="11">${label}</text>
-    <text x="85" y="100" text-anchor="middle" fill="#fff" font-size="16" font-weight="800">${brlShort(total)}</text></svg>`;
+  return `<svg class="donut" viewBox="0 0 170 170"><circle r="${R}" cx="85" cy="85" fill="none" style="stroke:var(--s2)" stroke-width="26"/>${segs}
+    <text x="85" y="80" text-anchor="middle" style="fill:var(--muted)" font-size="11">${label}</text>
+    <text x="85" y="100" text-anchor="middle" style="fill:var(--ink)" font-size="16" font-weight="800">${brlShort(total)}</text></svg>`;
 }
 function renderCharts(E, ME) {
   const g = groupCats(ME, chT), tot = g.reduce((s, x) => s + x.v, 0);
@@ -273,9 +286,9 @@ function renderCharts(E, ME) {
     const x = i * gap + gap / 2, hi = d.inc / max * 120, ho = d.out / max * 120;
     return `<rect x="${x - bw - 2}" y="${140 - hi}" width="${bw}" height="${hi}" rx="4" fill="#22c55e"/>
       <rect x="${x + 2}" y="${140 - ho}" width="${bw}" height="${ho}" rx="4" fill="#ff5a5f"/>
-      <text x="${x}" y="157" text-anchor="middle" ${d.m === curM ? 'style="fill:#fff;font-weight:700"' : ''}>${mLabel(d.m, true)}</text>`;
+      <text x="${x}" y="157" text-anchor="middle" ${d.m === curM ? 'class="cur"' : ''}>${mLabel(d.m, true)}</text>`;
   }).join('');
-  $('#chBars').innerHTML = `<div class="bars"><svg viewBox="0 0 ${W} ${H}"><line x1="0" x2="${W}" y1="140.5" y2="140.5" stroke="#23262d"/>${bars}</svg></div>
+  $('#chBars').innerHTML = `<div class="bars"><svg viewBox="0 0 ${W} ${H}"><line x1="0" x2="${W}" y1="140.5" y2="140.5" style="stroke:var(--line)"/>${bars}</svg></div>
     <div class="blg"><span><i style="background:#22c55e"></i>Receitas</span><span><i style="background:#ff5a5f"></i>Despesas</span></div>`;
   // métodos
   const D = ME.filter(e => e.t.type === 'despesa');
@@ -350,10 +363,11 @@ $('#txForm').addEventListener('submit', e => {
 });
 $('#dlgTx').addEventListener('close', () => { if (txQueue) { const q = txQueue; txQueue = null; q.cancel?.(); } });
 function upsertTx(t) {
+  touch(t);
   if (!t.id) { t.id = uid(); t.ts = Date.now(); S.tx.push(t); } else { const i = S.tx.findIndex(x => x.id === t.id); if (i >= 0) S.tx[i] = t; else S.tx.push(t); }
   save(); curM = S.settings.mode === 'fatura' && t.method === 'credito' && card(t.cardId) ? invoiceKey(card(t.cardId), t.date) : mKey(t.date); render();
 }
-$('#txDel').onclick = () => { if (!confirm('Excluir este lançamento?')) return; S.tx = S.tx.filter(t => t.id !== tx.id); save(); $('#dlgTx').close(); render(); toast('Excluído'); };
+$('#txDel').onclick = () => { if (!confirm('Excluir este lançamento?')) return; kill(tx.id); S.tx = S.tx.filter(t => t.id !== tx.id); save(); $('#dlgTx').close(); render(); toast('Excluído'); };
 
 /* ===================== Banco ===================== */
 let bk = null;
@@ -374,7 +388,7 @@ $('#bName').addEventListener('input', bankPreview);
 $('#bankForm').addEventListener('submit', e => {
   e.preventDefault();
   const name = $('#bName').value.trim(); if (!name) { toast('Dê um nome ao banco'); return; }
-  const b = { ...bk, name, ab: bk.k === 'outro' ? name.slice(0, 2) : bk.ab };
+  const b = touch({ ...bk, name, ab: bk.k === 'outro' ? name.slice(0, 2) : bk.ab });
   if (!b.id) { b.id = uid(); S.banks.push(b); } else S.banks[S.banks.findIndex(x => x.id === b.id)] = b;
   save(); $('#dlgBank').close(); render();
   if (!bk.id && !S.cards.some(c => c.bankId === b.id) && confirm(`Cadastrar um cartão de crédito do ${name} agora?`)) openCard(null, b.id);
@@ -382,6 +396,7 @@ $('#bankForm').addEventListener('submit', e => {
 $('#bankDel').onclick = () => {
   const n = S.cards.filter(c => c.bankId === bk.id).length;
   if (!confirm(`Excluir o banco${n ? ` e seus ${n} cartão(ões)` : ''}? Os lançamentos ficam salvos.`)) return;
+  S.cards.filter(c => c.bankId === bk.id).forEach(c => kill(c.id)); kill(bk.id);
   S.cards = S.cards.filter(c => c.bankId !== bk.id); S.banks = S.banks.filter(b => b.id !== bk.id); save(); $('#dlgBank').close(); render();
 };
 
@@ -401,12 +416,12 @@ function cardPreview() { const c = readCard(); const st = c.id ? cardStats({ ...
 $('#cardForm').addEventListener('input', cardPreview);
 $('#cardForm').addEventListener('submit', e => {
   e.preventDefault();
-  const c = readCard(); if (!c.name) c.name = bank(c.bankId)?.name || 'Cartão';
+  const c = touch(readCard()); if (!c.name) c.name = bank(c.bankId)?.name || 'Cartão';
   if (!c.limit) { toast('Informe o limite'); $('#cLimit').focus(); return; }
   if (!c.id) { c.id = uid(); S.cards.push(c); } else S.cards[S.cards.findIndex(x => x.id === c.id)] = c;
   save(); $('#dlgCard').close(); $('#dlgInv').open && $('#dlgInv').close(); render(); toast('Cartão salvo ✓');
 });
-$('#cardDel').onclick = () => { if (!confirm('Excluir este cartão? Os lançamentos ficam salvos, sem cartão.')) return; S.cards = S.cards.filter(c => c.id !== cd.id); save(); $('#dlgCard').close(); $('#dlgInv').open && $('#dlgInv').close(); render(); };
+$('#cardDel').onclick = () => { if (!confirm('Excluir este cartão? Os lançamentos ficam salvos, sem cartão.')) return; kill(cd.id); S.cards = S.cards.filter(c => c.id !== cd.id); save(); $('#dlgCard').close(); $('#dlgInv').open && $('#dlgInv').close(); render(); };
 
 /* ===================== Faturas ===================== */
 let invC = null, invK = null;
@@ -428,7 +443,7 @@ $('#invEdit').onclick = () => openCard(invC);
 $('#invPay').onclick = () => {
   const L = S.paid[invC.id] ||= [];
   if (L.includes(invK)) S.paid[invC.id] = L.filter(k => k !== invK); else L.push(invK);
-  save(); renderInv(); render(); toast(isPaid(invC.id, invK) ? 'Fatura paga — limite liberado ✓' : 'Pagamento desmarcado');
+  S.metaU = Date.now(); save(); renderInv(); render(); toast(isPaid(invC.id, invK) ? 'Fatura paga — limite liberado ✓' : 'Pagamento desmarcado');
 };
 
 /* ===================== Ajustes / categorias / backup ===================== */
@@ -438,9 +453,10 @@ $('#btnSettings').onclick = () => {
   $$('#sMode button').forEach(b => b.classList.toggle('on', b.dataset.v === S.settings.mode));
   $('#sKey').value = S.settings.key || '';
   $('#sKeyInfo').innerHTML = GEMINI_KEY ? '✓ Este build já inclui a chave da IA (secret GEMINI_API_KEY).' : aiKey() ? '✓ IA ativa com a sua chave.' : 'Sem chave: mensagem e voz usam o interpretador local; a leitura de foto precisa da IA. Crie uma chave grátis em aistudio.google.com.';
-  renderCatList(); $('#sVer').textContent = `GranaGo v${VERSION} · ${S.tx.length} lançamentos`; $('#dlgSet').showModal();
+  renderCatList(); $('#sVer').textContent = `GranaGo v${VERSION} · ${S.tx.length} lançamentos`;
+  applyTheme(); fillReminders(); sheetStatus(); $('#dlgSet').showModal();
 };
-$('#sMode').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; S.settings.mode = b.dataset.v; $$('#sMode button').forEach(x => x.classList.toggle('on', x === b)); save(); render(); });
+$('#sMode').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; S.settings.mode = b.dataset.v; S.metaU = Date.now(); $$('#sMode button').forEach(x => x.classList.toggle('on', x === b)); save(); render(); });
 $('#sKey').addEventListener('change', e => { S.settings.key = e.target.value.trim(); save(); toast(S.settings.key ? 'Chave salva' : 'Chave removida'); });
 function renderCatList() {
   $('#sCats').innerHTML = ['despesa', 'receita'].map(tp => `<div class="day"><span>${tp === 'despesa' ? 'Despesas' : 'Receitas'}</span></div>` +
@@ -459,7 +475,7 @@ $('#sAddCat').onclick = () => openCat();
 $('#catType').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (!b) return; ct.type = b.dataset.t; $$('#catType button').forEach(x => x.classList.toggle('on', x === b)); });
 $('#catForm').addEventListener('submit', e => {
   e.preventDefault();
-  const c = { ...ct, name: $('#catName').value.trim(), icon: $('#catIcon').value.trim() || '🏷️', color: $('#catColor').value, kw: $('#catKw').value.trim() };
+  const c = touch({ ...ct, name: $('#catName').value.trim(), icon: $('#catIcon').value.trim() || '🏷️', color: $('#catColor').value, kw: $('#catKw').value.trim() });
   if (!c.name) { toast('Dê um nome'); return; }
   if (!c.id) { c.id = uid(); S.cats.push(c); } else S.cats[S.cats.findIndex(x => x.id === c.id)] = c;
   save(); $('#dlgCat').close(); renderCatList(); render();
@@ -468,8 +484,8 @@ $('#catDel').onclick = () => {
   const n = S.tx.filter(t => t.cat === ct.id).length;
   if (!confirm(n ? `${n} lançamento(s) usam esta categoria e irão para "Outros". Excluir?` : 'Excluir categoria?')) return;
   const other = S.cats.find(c => c.type === ct.type && c.id !== ct.id && /outr/i.test(c.name)) || S.cats.find(c => c.type === ct.type && c.id !== ct.id);
-  S.tx.forEach(t => { if (t.cat === ct.id) t.cat = other?.id; });
-  S.cats = S.cats.filter(c => c.id !== ct.id); save(); $('#dlgCat').close(); renderCatList(); render();
+  S.tx.forEach(t => { if (t.cat === ct.id) touch(t).cat = other?.id; });
+  kill(ct.id); S.cats = S.cats.filter(c => c.id !== ct.id); save(); $('#dlgCat').close(); renderCatList(); render();
 };
 $('#sExport').onclick = async () => {
   const blob = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' });
@@ -481,10 +497,28 @@ $('#sExport').onclick = async () => {
 $('#sImport').onclick = () => $('#fileImport').click();
 $('#fileImport').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  try { const d = JSON.parse(await f.text()); if (!d.tx) throw 0; if (!confirm(`Substituir os dados atuais por este backup (${d.tx.length} lançamentos)?`)) return; S = migrate(d); save(); render(); toast('Backup restaurado ✓'); $('#dlgSet').close(); }
-  catch (_) { toast('Arquivo de backup inválido'); }
+  try {
+    const d = JSON.parse(await f.text()); if (!d.tx) throw 0;
+    if (!confirm(`Substituir os dados atuais por este backup (${d.tx.length} lançamentos)?`)) return;
+    const keep = S.settings, dead = { ...S.dead }, now = Date.now();
+    for (const k of ['tx', 'banks', 'cards', 'cats']) for (const r of S[k]) dead[r.id] = now; // some com o que não está no backup (também na planilha)
+    S = migrate(d); S.settings = { ...keep, mode: S.settings.mode };
+    for (const k of ['tx', 'banks', 'cards', 'cats']) for (const r of S[k]) { r.u = now + 1; delete dead[r.id]; }
+    S.dead = { ...dead, ...S.dead }; S.metaU = now;
+    save(); render(); toast('Backup restaurado ✓'); $('#dlgSet').close();
+  } catch (_) { toast('Arquivo de backup inválido'); }
 };
-$('#sReset').onclick = () => { if (!confirm('Apagar TODOS os lançamentos, bancos e cartões?')) return; if (!confirm('Tem certeza? Não dá para desfazer.')) return; localStorage.removeItem(KEY); S = load(); save(); $('#dlgSet').close(); render(); };
+$('#sReset').onclick = () => {
+  const sh = S.settings.sheet.url;
+  if (!confirm(`Apagar TODOS os lançamentos, bancos e cartões?${sh ? ' Eles também serão apagados da planilha conectada.' : ''}`)) return;
+  if (!confirm('Tem certeza? Não dá para desfazer.')) return;
+  const keep = S.settings, dead = { ...S.dead }, now = Date.now();
+  for (const k of ['tx', 'banks', 'cards', 'cats']) for (const r of S[k]) dead[r.id] = now;
+  localStorage.removeItem(KEY); S = load();
+  S.settings = { ...keep, mode: 'compra' }; S.metaU = now;
+  for (const c of S.cats) { c.u = now + 1; delete dead[c.id]; } // categorias padrão voltam
+  S.dead = dead; save(); $('#dlgSet').close(); render();
+};
 
 /* ===================== Interpretador local (sem internet / sem chave) ===================== */
 const NUMW = { um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, onze: 11, doze: 12, quinze: 15, vinte: 20, trinta: 30, quarenta: 40, cinquenta: 50, sessenta: 60, setenta: 70, oitenta: 80, noventa: 90, cem: 100, cento: 100, duzentos: 200, trezentos: 300, quatrocentos: 400, quinhentos: 500, mil: 1000 };
@@ -784,6 +818,360 @@ $('#qText').addEventListener('input', e => { e.target.style.height = 'auto'; e.t
 $('#qMic').onclick = () => openAI('audio');
 $('#qCam').onclick = () => $('#fileCam').click();
 
+/* ===================== Depois de cada alteração ===================== */
+let afterT = 0;
+function afterChange() {
+  clearTimeout(afterT);
+  afterT = setTimeout(() => { widgetSync(); scheduleReminders(); }, 900);
+  sheetSoon();
+}
+
+/* ===================== Aparência (local: cada aparelho escolhe o seu) ===================== */
+const THEME_KEY = 'granago:theme';
+const LOOKS = { dark: { mode: 'dark', glass: false }, light: { mode: 'light', glass: false }, 'glass-light': { mode: 'light', glass: true }, 'glass-dark': { mode: 'dark', glass: true } };
+let look = { mode: 'dark', glass: false, auto: false };
+try { Object.assign(look, JSON.parse(localStorage.getItem(THEME_KEY) || '{}')); } catch (e) { }
+const mqDark = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : { matches: true };
+function applyTheme() {
+  const h = document.documentElement, mode = look.auto ? (mqDark.matches ? 'dark' : 'light') : look.mode;
+  h.dataset.theme = mode;
+  if (look.glass) h.dataset.glass = ''; else delete h.dataset.glass;
+  $('meta[name=theme-color]').content = getComputedStyle(h).getPropertyValue('--bg').trim() || (mode === 'dark' ? '#000000' : '#f2f4f8');
+  $$('[data-look]').forEach(b => { const l = LOOKS[b.dataset.look], on = l.glass === !!look.glass && l.mode === mode; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+  $('#themeAuto').checked = !!look.auto;
+}
+function setLook(p) {
+  Object.assign(look, p);
+  try { localStorage.setItem(THEME_KEY, JSON.stringify(look)); } catch (e) { }
+  const h = document.documentElement; h.classList.add('theming'); applyTheme();
+  clearTimeout(setLook.t); setLook.t = setTimeout(() => h.classList.remove('theming'), 450);
+}
+$$('[data-look]').forEach(b => b.onclick = () => setLook({ ...LOOKS[b.dataset.look], auto: false }));
+$('#themeAuto').onchange = e => setLook({ auto: e.target.checked });
+mqDark.addEventListener?.('change', () => { if (look.auto) applyTheme(); });
+applyTheme();
+
+/* ===================== Ações rápidas (widget, notificação) ===================== */
+function quickAction(a) {
+  if (!a || $('#dlgTx').open || $('#dlgReview').open) return;
+  if (view !== 'home') go('home');
+  if (a === 'despesa') openTx(null, { type: 'despesa' });
+  else if (a === 'msg' || a === 'audio') openAI(a);
+  else if (a === 'foto') $('#fileCam').click();
+  else if (a.startsWith('card:')) { if (card(a.slice(5))) openInv(a.slice(5)); else go('cards'); }
+  else if (!$('#dlgNew').open) $('#dlgNew').showModal();
+}
+
+/* ===================== Lembretes (12h e fim do dia) =====================
+   APK: notificações locais nativas, agendadas para os próximos 30 dias e reagendadas sempre que o app
+   abre ou algo muda (assim o aviso da noite mostra quanto você já lançou hoje).
+   Navegador: aviso enquanto o app estiver aberto. */
+const LN = (() => { try { return window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins.LocalNotifications; } catch (e) { return null; } })();
+const REM_ID = { noon: 5000, night: 5100 }, REM_DAYS = 30;
+const toMin = s => { const [h, m] = String(s || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+const isoOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+function todaySpent() {
+  const t = todayISO(), L = S.tx.filter(x => x.date === t && x.type === 'despesa');
+  return { n: L.length, v: round2(L.reduce((s, x) => s + x.amount, 0)), L };
+}
+function remText(kind, first) {
+  if (kind === 'noon') return { title: '🍽️ Já lançou os gastos de hoje?', body: 'Café, almoço, transporte… Toque para lançar — pode ser por mensagem, áudio ou foto da nota.' };
+  if (!first) return { title: '🌙 Fechamento do dia', body: 'Lance os gastos de hoje antes de dormir — leva 10 segundos por mensagem ou áudio.' };
+  const s = todaySpent();
+  return { title: '🌙 Fechamento do dia', body: s.n ? `Hoje você lançou ${brl(s.v)} em ${s.n} gasto${s.n > 1 ? 's' : ''}. Faltou algum?` : 'Você ainda não lançou nenhum gasto hoje. Bora registrar antes de dormir?' };
+}
+function remList() {
+  const r = S.settings.rem, out = [], now = new Date();
+  if (!r.on) return out;
+  const mins = { noon: toMin(r.noon), night: toMin(r.night) };
+  const today = todayISO();
+  const madeToday = S.tx.filter(t => t.ts && isoOf(new Date(t.ts)) === today).map(t => { const d = new Date(t.ts); return d.getHours() * 60 + d.getMinutes(); });
+  for (let d = 0; d < REM_DAYS; d++) {
+    for (const k of ['noon', 'night']) {
+      const min = mins[k], at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d, Math.floor(min / 60), min % 60);
+      if (at <= now) continue;
+      // "pular se já lancei": manhã = até o lembrete do meio-dia; tarde/noite = do meio-dia até o da noite
+      if (d === 0 && r.skip) { const from = k === 'noon' ? 0 : Math.min(mins.noon, min); if (madeToday.some(m => m >= from && m < min)) continue; }
+      out.push({ id: REM_ID[k] + d, at, ...remText(k, d === 0) });
+    }
+  }
+  return out;
+}
+let remReady = false, remBusy = null, remPerm = null;
+function scheduleReminders(ask) {
+  if (!LN) return Promise.resolve(true);
+  const run = async () => {
+    try {
+      const pend = await LN.getPending();
+      const old = (pend.notifications || []).filter(n => n.id >= 5000 && n.id < 5200);
+      if (old.length) await LN.cancel({ notifications: old.map(n => ({ id: n.id })) });
+      const list = remList(); if (!list.length) return true;
+      let perm = await LN.checkPermissions();
+      if (perm.display !== 'granted' && ask) perm = await LN.requestPermissions();
+      if (perm.display !== 'granted') { remPerm = false; return false; }
+      remPerm = true;
+      if (!remReady) {
+        try { await LN.createChannel({ id: 'lembretes', name: 'Lembretes de gastos', description: 'Aviso às 12h e no fim do dia para lançar os gastos', importance: 4, visibility: 1, vibration: true }); } catch (e) { }
+        await LN.registerActionTypes({ types: [{ id: 'GASTO', actions: [{ id: 'msg', title: '💬 Escrever' }, { id: 'audio', title: '🎙️ Falar' }, { id: 'foto', title: '📷 Nota' }] }] });
+        remReady = true;
+      }
+      await LN.schedule({ notifications: list.map(n => ({ id: n.id, title: n.title, body: n.body, channelId: 'lembretes', actionTypeId: 'GASTO', smallIcon: 'ic_stat_grana', iconColor: '#22c55e', extra: { kind: 'rem' }, schedule: { at: n.at, allowWhileIdle: true } })) });
+      return true;
+    } catch (e) { console.warn('lembretes', e); return false; }
+  };
+  remBusy = (remBusy || Promise.resolve()).then(run); // um agendamento por vez
+  return remBusy;
+}
+function fillReminders() {
+  const r = S.settings.rem;
+  $('#remOn').checked = r.on; $('#remNoon').value = r.noon; $('#remNight').value = r.night; $('#remSkip').checked = !!r.skip;
+  $$('#remNoon,#remNight,#remSkip').forEach(x => x.disabled = !r.on);
+  $('#remInfo').innerHTML = !r.on ? 'Lembretes desligados.' : remPerm === false ? '<span class="err">Notificações bloqueadas — libere nas configurações do Android (Apps → GranaGo → Notificações).</span>'
+    : LN ? `🔔 Todo dia às <b>${r.noon}</b> e às <b>${r.night}</b>. Tocar abre o lançamento; os botões já abrem mensagem, áudio ou câmera.` : `🔔 Às ${r.noon} e ${r.night} — no navegador o aviso só aparece com o app aberto.`;
+  if (LN && LN.checkExactNotificationSetting) LN.checkExactNotificationSetting().then(x => { $('#exactBtn').hidden = !r.on || x.exact_alarm === 'granted'; }).catch(() => { });
+}
+async function remChanged(ask) {
+  S.settings.rem = { on: $('#remOn').checked, noon: $('#remNoon').value || '12:00', night: $('#remNight').value || '21:00', skip: $('#remSkip').checked };
+  persist(); const ok = await scheduleReminders(ask); fillReminders();
+  if (ask && S.settings.rem.on && !LN && 'Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission(); } catch (e) { } }
+  if (ask && ok && S.settings.rem.on) toast('Lembretes ativados ✓');
+}
+$('#remOn').onchange = () => remChanged(true);
+$$('#remNoon,#remNight,#remSkip').forEach(x => x.onchange = () => remChanged(false));
+$('#exactBtn').onclick = async () => { try { await LN.changeExactNotificationSetting(); } catch (e) { } setTimeout(fillReminders, 1500); };
+if (LN) {
+  try {
+    LN.addListener('localNotificationActionPerformed', ev => {
+      if ((ev.notification?.extra || {}).kind !== 'rem') return;
+      setTimeout(() => quickAction(ev.actionId === 'tap' ? 'new' : ev.actionId), 350);
+    });
+  } catch (e) { console.warn(e); }
+}
+// Navegador: confere a cada 20 s se é a hora de algum lembrete
+const remFired = new Set();
+setInterval(() => {
+  const r = S.settings.rem; if (LN || !r.on) return;
+  const n = new Date(), hm = `${pad(n.getHours())}:${pad(n.getMinutes())}`;
+  for (const k of ['noon', 'night']) {
+    const key = todayISO() + k; if (r[k] !== hm || remFired.has(key)) continue;
+    remFired.add(key); const t = remText(k, true);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try { const no = new Notification(t.title, { body: t.body, icon: 'icons/icon-192.png', tag: 'granago-' + k }); no.onclick = () => { window.focus(); quickAction('new'); }; } catch (e) { toast(t.title, 6000); }
+    } else toast(t.title, 6000);
+  }
+}, 20000);
+
+/* ===================== Widgets da tela inicial (APK) =====================
+   O app envia os números já formatados (saldo do mês, gastos de hoje, cartões) e o tema; os botões
+   do widget abrem o app direto no lançamento (manual, mensagem, áudio, foto) ou na fatura do cartão. */
+const WB = (() => { try { return window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins.GranaWidget; } catch (e) { return null; } })();
+function widgetData() {
+  const E = entries(), m = mKey(todayISO()), ME = E.filter(e => e.month === m);
+  const inc = sumType(ME, 'receita'), out = sumType(ME, 'despesa'), td = todaySpent();
+  const mon = MONTHS[+m.slice(5) - 1];
+  return {
+    day: todayISO(), month: m, monthLbl: `SALDO DE ${mon.toUpperCase()}`, monthShort: `SALDO · ${mon.slice(0, 3).toUpperCase()}`,
+    bal: brl(inc - out), neg: inc - out < 0, inc: brl(inc), out: brl(out), incS: brlShort(inc), outS: brlShort(out),
+    pct: inc ? Math.min(100, Math.round(out / inc * 100)) : out ? 100 : 0,
+    today: brl(td.v), todayN: td.n,
+    last: td.L.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 2).map(x => `${x.desc || cat(x.cat).name} · ${brl(x.amount)}`),
+    cards: S.cards.map(c => {
+      const st = cardStats(c, E), b = bank(c.bankId) || BANKS.at(-1);
+      return { id: c.id, name: c.name || 'Cartão', bank: b.name || b.n, ab: b.ab || (b.name || '').slice(0, 2), color: b.c1, fg: b.fg || '#fff',
+        inv: brl(st.curTotal), invLbl: 'Fatura ' + mLabel(st.cur, true), due: 'vence ' + dueDate(c, st.cur).split('-').reverse().slice(0, 2).join('/'),
+        avail: brl(st.avail), limit: brlShort(+c.limit || 0), pct: c.limit ? Math.min(100, Math.max(0, Math.round(st.used / c.limit * 100))) : 0, paid: isPaid(c.id, st.cur) };
+    }),
+  };
+}
+let widgetLast = '';
+function widgetSync() {
+  if (!WB) return;
+  const msg = { data: JSON.stringify(widgetData()), theme: S.settings.widgetTheme || 'dark' };
+  const key = msg.data + msg.theme; if (key === widgetLast) return;
+  widgetLast = key; WB.update(msg).catch(() => { widgetLast = ''; });
+}
+async function widgetPull() {
+  if (!WB) return;
+  try { const r = await WB.takePending(); if (r && r.action) setTimeout(() => quickAction(r.action), 300); } catch (e) { console.warn('widget', e); }
+}
+if (WB) try { WB.addListener('widgetAction', () => widgetPull()); } catch (e) { }
+function renderWidgets() {
+  const d = widgetData(), th = S.settings.widgetTheme || 'dark';
+  $('#dlgWidgets').dataset.theme = th;
+  $$('#wgTheme button').forEach(b => b.classList.toggle('on', b.dataset.v === th));
+  $('#wgMonthLbl').textContent = d.monthLbl; $('#wgBal').textContent = d.bal; $('#wgBal').style.color = d.neg ? 'var(--wout)' : '';
+  $('#wgIn').textContent = d.inc; $('#wgOut').textContent = d.out; $('#wgMonthBar').style.width = d.pct + '%'; $('#wgMonthBar').style.background = 'var(--wout)';
+  $('#wgToday').textContent = d.today; $('#wgTodayN').textContent = d.todayN ? `${d.todayN} gasto${d.todayN > 1 ? 's' : ''}` : 'nenhum';
+  $('#wgLast1').textContent = d.last[0] || 'Toque em ＋ para lançar o primeiro gasto'; $('#wgLast2').textContent = d.last[1] || '';
+  const c = d.cards[0];
+  $('#wgCLogo').textContent = c ? c.ab : '$'; $('#wgCLogo').style.cssText = `background:${c ? c.color : '#3a3f4b'};color:${c ? c.fg : '#fff'}`;
+  $('#wgCName').textContent = c ? `${c.bank} · ${c.name}`.toUpperCase() : 'CARTÃO'; $('#wgCInv').textContent = c ? c.inv : '—';
+  $('#wgCDue').textContent = c ? `${c.invLbl} · ${c.due}${c.paid ? ' · paga ✓' : ''}` : 'Cadastre um cartão em Cartões';
+  $('#wgCBar').style.width = (c ? c.pct : 0) + '%'; $('#wgCAvail').textContent = c ? c.avail : '—'; $('#wgCLimit').textContent = c ? c.limit : '—';
+  $$('[data-pin]').forEach(b => b.hidden = !WB);
+  $('#wgHelp').innerHTML = WB ? 'Se o botão não funcionar no seu celular: segure um espaço vazio da tela inicial → <b>Widgets</b> → <b>GranaGo</b> e arraste o widget.' : 'Os widgets funcionam no app Android (APK). Esta é a prévia de como eles ficam.';
+}
+$('#openWidgets').onclick = () => { renderWidgets(); $('#dlgWidgets').showModal(); };
+$('#wgTheme').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; S.settings.widgetTheme = b.dataset.v; persist(); renderWidgets(); widgetSync(); toast('Tema dos widgets atualizado'); });
+$$('[data-pin]').forEach(b => b.onclick = async () => {
+  try { const r = await WB.pin({ kind: b.dataset.pin }); if (!r.ok) toast('Segure a tela inicial → Widgets → GranaGo', 6000); }
+  catch (e) { toast('Segure a tela inicial → Widgets → GranaGo', 6000); }
+});
+
+/* ===================== Planilha Google (banco de dados) =====================
+   O Apps Script da planilha (www/apps-script/Code.gs) recebe todos os dados, junta com o que está na
+   planilha (vence a alteração mais recente, por registro) e devolve o resultado. Edições, linhas novas e
+   linhas apagadas na planilha voltam para o app. O app continua offline-first: salva no aparelho e envia depois. */
+const TABLES = ['tx', 'banks', 'cards', 'cats'];
+const METHOD_LBL = { pix: 'Pix', credito: 'Crédito', debito: 'Débito', dinheiro: 'Dinheiro', boleto: 'Boleto', outro: 'Outro' };
+const parseMethod = s => { const n = norm(s).trim(); if (!n) return 'pix'; return Object.keys(METHOD_LBL).find(k => n.startsWith(k.slice(0, 4))) || (/cart/.test(n) ? 'credito' : 'outro'); };
+const parseType = s => /receit|entrada|ganho/.test(norm(s)) ? 'receita' : 'despesa';
+const cardLabel = c => `${bank(c.bankId)?.name || ''} · ${c.name}`;
+const hexOr = (v, d) => /^#[0-9a-f]{6}$/i.test(String(v || '').trim()) ? String(v).trim() : d;
+// id guardado continua valendo se o nome bate; se você trocou o nome na planilha, procura pelo nome
+function resolveId(list, id, name, labels) {
+  const n = norm(name).trim(), own = list.find(x => x.id === id);
+  if (!n) return own ? id : '';
+  if (own && labels(own).some(l => norm(l).trim() === n)) return id;
+  const hit = list.find(x => labels(x).some(l => norm(l).trim() === n));
+  return hit ? hit.id : own ? id : '';
+}
+function sheetPayload() {
+  return {
+    action: 'sync', pass: S.settings.sheet.pass || '',
+    tx: S.tx.map(t => { const c = t.method === 'credito' && card(t.cardId); return { id: t.id, date: t.date, type: t.type === 'receita' ? 'Receita' : 'Despesa', desc: t.desc || '', amount: t.amount, catName: cat(t.cat).name, method: METHOD_LBL[t.method] || 'Pix', cardName: c ? cardLabel(c) : '', bankName: t.method !== 'credito' ? bank(t.bankId)?.name || '' : '', inst: t.inst || 1, note: t.note || '', u: t.u || 0, cat: t.cat || '', cardId: t.cardId || '', bankId: t.bankId || '', ts: t.ts || 0 }; }),
+    banks: S.banks.map(b => ({ id: b.id, name: b.name, k: b.k || '', c1: b.c1, c2: b.c2, fg: b.fg || '#fff', style: b.style || 'grad', ab: b.ab || '', u: b.u || 0 })),
+    cards: S.cards.map(c => ({ id: c.id, name: c.name, bankName: bank(c.bankId)?.name || '', brand: c.brand || '', final: c.final || '', limit: +c.limit || 0, closeDay: +c.closeDay || 1, dueDay: +c.dueDay || 10, u: c.u || 0, bankId: c.bankId || '' })),
+    cats: S.cats.map(c => ({ id: c.id, type: c.type === 'receita' ? 'Receita' : 'Despesa', name: c.name, icon: c.icon, color: c.color, kw: c.kw || '', u: c.u || 0 })),
+    dead: S.dead, meta: { paid: S.paid, mode: S.settings.mode, u: S.metaU || 0 },
+  };
+}
+// junta o que veio da planilha com o que está no aparelho (o aparelho pode ter mudado durante o envio)
+function mergeById(local, remote, dead) {
+  const m = new Map(remote.map(x => [x.id, x]));
+  for (const x of local) { const y = m.get(x.id); if (!y || (x.u || 0) > (y.u || 0)) m.set(x.id, x); }
+  return [...m.values()].filter(x => !(x.id in dead) || (x.u || 0) > dead[x.id]);
+}
+function sheetApply(r) {
+  const T = r.tables || {}, dead = { ...S.dead };
+  for (const [id, t] of Object.entries(r.dead || {})) if (t > (dead[id] || 0)) dead[id] = t;
+  S.dead = dead;
+  const clamp = (v, a, b, d) => Math.min(b, Math.max(a, Math.round(+v) || d));
+  S.banks = mergeById(S.banks, (T.banks || []).map(b => {
+    const p = BANKS.find(x => x.k === norm(b.k).trim()) || BANKS.find(x => norm(x.n) === norm(b.name)) || BANKS.at(-1);
+    const name = String(b.name || p.n).trim();
+    return { id: b.id, k: p.k, name, c1: hexOr(b.c1, p.c1), c2: hexOr(b.c2, p.c2), fg: hexOr(b.fg, p.fg), style: STYLES.some(s => s[0] === b.style) ? b.style : 'grad', ab: String(b.ab || p.ab || name.slice(0, 2)), u: +b.u || 0 };
+  }), dead);
+  S.cards = mergeById(S.cards, (T.cards || []).map(c => ({
+    id: c.id, bankId: resolveId(S.banks, c.bankId, c.bankName, b => [b.name]) || c.bankId, name: String(c.name || 'Cartão').trim(), brand: String(c.brand || 'Mastercard'),
+    final: String(c.final || '').replace(/\D/g, '').slice(-4), limit: Math.abs(+c.limit || 0), closeDay: clamp(c.closeDay, 1, 31, 1), dueDay: clamp(c.dueDay, 1, 31, 10), u: +c.u || 0,
+  })), dead);
+  S.cats = mergeById(S.cats, (T.cats || []).map(c => ({ id: c.id, type: parseType(c.type), name: String(c.name || 'Sem nome').trim(), icon: String(c.icon || '🏷️'), color: hexOr(c.color, '#64748B'), kw: String(c.kw || ''), u: +c.u || 0 })), dead);
+  S.tx = mergeById(S.tx, (T.tx || []).map(t => {
+    const type = parseType(t.type), method = type === 'receita' && parseMethod(t.method) === 'credito' ? 'pix' : parseMethod(t.method);
+    const cats = S.cats.filter(c => c.type === type);
+    const catId = resolveId(cats, t.cat, t.catName, c => [c.name]) || (cats.find(c => /outr/i.test(c.name)) || cats[0] || {}).id || '';
+    return {
+      id: t.id, type, date: /^\d{4}-\d{2}-\d{2}$/.test(t.date) ? t.date : todayISO(), desc: String(t.desc || '').trim(), amount: round2(Math.abs(+t.amount || 0)), cat: catId, method,
+      cardId: method === 'credito' ? resolveId(S.cards, t.cardId, t.cardName, c => [cardLabel(c), c.name]) : '',
+      bankId: method === 'credito' || method === 'dinheiro' ? '' : resolveId(S.banks, t.bankId, t.bankName, b => [b.name]),
+      inst: method === 'credito' ? clamp(t.inst, 1, 48, 1) : 1, note: String(t.note || ''), u: +t.u || 0, ts: +t.ts || +t.u || 0,
+    };
+  }), dead);
+  if (r.meta && (+r.meta.u || 0) > (S.metaU || 0)) { S.paid = r.meta.paid || {}; S.settings.mode = r.meta.mode === 'fatura' ? 'fatura' : 'compra'; S.metaU = +r.meta.u; }
+}
+// categorias com o mesmo nome (ex.: padrão criada em dois aparelhos) viram uma só
+function dedupeCats() {
+  const seen = new Map(); let ch = false;
+  const order = [...S.cats].sort((a, b) => (b.u || 0) - (a.u || 0) || (a.id.startsWith('c-') ? -1 : 0) - (b.id.startsWith('c-') ? -1 : 0));
+  for (const c of order) {
+    const k = c.type + '|' + norm(c.name).trim(), keep = seen.get(k);
+    if (!keep) { seen.set(k, c); continue; }
+    S.tx.forEach(t => { if (t.cat === c.id) touch(t).cat = keep.id; });
+    kill(c.id); S.cats = S.cats.filter(x => x !== c); ch = true;
+  }
+  return ch;
+}
+let syncing = false, syncAgain = false, syncT = 0;
+function sheetSoon(ms = 3000) { if (!S.settings.sheet.url) return; clearTimeout(syncT); syncT = setTimeout(() => sheetSync(), ms); }
+async function sheetSync(manual) {
+  const sh = S.settings.sheet; if (!sh.url) return false;
+  if (syncing) { syncAgain = true; return false; }
+  if (!manual && navigator.onLine === false) return false;
+  syncing = true; const c0 = chg; sheetStatus();
+  try {
+    let res;
+    try { res = await fetch(sh.url, { method: 'POST', headers: { 'content-type': 'text/plain;charset=utf-8' }, body: JSON.stringify(sheetPayload()), redirect: 'follow' }); }
+    catch (e) { throw new Error('Sem conexão com a planilha — envio quando a internet voltar.'); }
+    const txt = await res.text(); let r;
+    try { r = JSON.parse(txt); } catch (e) { throw new Error(/<html|<!doctype/i.test(txt) ? 'O link não respondeu como Apps Script. Confira se implantou como "App da Web" com acesso "Qualquer pessoa" e se copiou a URL que termina em /exec.' : `Resposta inválida da planilha (HTTP ${res.status}).`); }
+    if (!r.ok) throw new Error({ senha: 'Senha incorreta (confira a SENHA no código do Apps Script).', action: 'Código do Apps Script desatualizado — cole a versão nova.' }[r.error] || 'Erro na planilha: ' + r.error);
+    sheetApply(r);
+    const dup = dedupeCats();
+    Object.assign(sh, { last: Date.now(), err: '', sheetUrl: r.url || sh.sheetUrl || '', name: r.name || sh.name || '', dirty: chg !== c0 || dup });
+    persist(); render(); widgetSync(); scheduleReminders();
+    if (sh.dirty) syncAgain = true;
+    return true;
+  } catch (e) {
+    sh.err = e.message; persist(); return false;
+  } finally {
+    syncing = false; sheetStatus();
+    if (syncAgain) { syncAgain = false; sheetSoon(1500); }
+  }
+}
+const hhmm = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+function sheetStatus() {
+  const sh = S.settings.sheet;
+  const sub = !sh.url ? 'Não conectada — dados só neste aparelho' : syncing ? 'Sincronizando…' : sh.err ? '⚠️ ' + sh.err : sh.dirty ? 'Alterações aguardando envio' : sh.last ? `✓ Sincronizada às ${hhmm(sh.last)}${sh.name ? ' · ' + sh.name : ''}` : 'Conectada';
+  $('#subSheet').textContent = sub;
+  $('#shStatus').innerHTML = !sh.url ? 'Ainda não conectada. Siga os passos abaixo e cole o link do Apps Script.'
+    : syncing ? '<span class="spinner"></span>Sincronizando com a planilha…'
+      : sh.err ? `<span class="err">${esc(sh.err)}</span>`
+        : `<b>✓ Conectada${sh.name ? ' a “' + esc(sh.name) + '”' : ''}</b>${sh.last ? ` · última sincronização às ${hhmm(sh.last)}` : ''}${sh.dirty ? ' · há alterações para enviar' : ''}`;
+  $('#shOpen').hidden = !sh.sheetUrl || !sh.url; $('#shOff').hidden = !sh.url;
+  $('#shSave').textContent = sh.url ? 'Sincronizar agora' : 'Conectar e sincronizar';
+}
+let gsCode = '';
+const loadCode = () => gsCode ? Promise.resolve(gsCode) : fetch('apps-script/Code.gs').then(r => r.ok ? r.text() : Promise.reject()).then(t => gsCode = t);
+$('#openSheet').onclick = () => {
+  const sh = S.settings.sheet; $('#shUrl').value = sh.url || ''; $('#shPass').value = sh.pass || '';
+  sheetStatus(); loadCode().catch(() => { }); $('#dlgSheet').showModal();
+};
+$('#shSave').onclick = async () => {
+  const sh = S.settings.sheet, url = $('#shUrl').value.trim();
+  if (/docs\.google\.com\/spreadsheets/i.test(url)) { $('#shStatus').innerHTML = '<span class="err">Esse é o link da planilha. Cole o link do <b>Apps Script</b> (Implantar → App da Web), que termina em <b>/exec</b> — veja os passos abaixo.</span>'; return; }
+  if (!/^https:\/\/script\.google(usercontent)?\.com\/.+/i.test(url)) { $('#shStatus').innerHTML = '<span class="err">Link inválido. Ele começa com https://script.google.com/macros/s/… e termina em /exec.</span>'; return; }
+  const changed = url !== sh.url;
+  Object.assign(sh, { url, pass: $('#shPass').value, dirty: true, err: '' });
+  if (changed) Object.assign(sh, { last: 0, sheetUrl: '', name: '' });
+  persist(); $('#shSave').disabled = true;
+  const ok = await sheetSync(true);
+  $('#shSave').disabled = false;
+  if (ok) toast(changed ? `Planilha conectada ✓ — ${S.tx.length} lançamentos` : 'Sincronizado ✓');
+};
+$('#shOff').onclick = () => {
+  if (!confirm('Desconectar a planilha? Os dados continuam neste aparelho e na planilha, mas param de sincronizar.')) return;
+  S.settings.sheet = { url: '', pass: '' }; persist(); $('#shUrl').value = ''; $('#shPass').value = ''; sheetStatus();
+};
+$('#shOpen').onclick = () => { const u = S.settings.sheet.sheetUrl; if (u) window.open(u, '_blank'); };
+$('#shCopy').onclick = async () => {
+  try {
+    const t = await loadCode();
+    try { await navigator.clipboard.writeText(t); }
+    catch (e) { const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    toast('Código copiado ✓ — cole no Apps Script');
+  } catch (e) { toast('Não consegui copiar. O código está em apps-script/Code.gs no GitHub.', 5000); }
+};
+setInterval(() => { if (document.visibilityState === 'visible' && !syncing) sheetSync(); }, 120000);
+window.addEventListener('online', () => sheetSoon(500));
+document.addEventListener('visibilitychange', () => {
+  const sh = S.settings.sheet;
+  if (document.visibilityState === 'visible') {
+    widgetPull(); scheduleReminders();
+    if (sh.url && Date.now() - (sh.last || 0) > 20000) sheetSoon(300);
+  } else if (sh.url && sh.dirty) sheetSync(); // saindo do app: envia o que falta
+});
+
 /* ===================== Início ===================== */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !window.Capacitor?.isNativePlatform?.()) navigator.serviceWorker.register('sw.js').catch(() => { });
 // Botão "voltar" (Android/navegador) fecha a folha aberta em vez de sair do app
@@ -793,3 +1181,7 @@ HTMLDialogElement.prototype.showModal = function () { if (this.open) return; _sh
 $$('dialog').forEach(d => d.addEventListener('close', () => { if (d._byPop) { d._byPop = false; return; } if (history.state && history.state.dlg) { ignorePop++; history.back(); } }));
 window.addEventListener('popstate', () => { if (ignorePop) { ignorePop--; return; } const d = $$('dialog').filter(x => x.open).pop(); if (d) { d._byPop = true; d.close(); } });
 render();
+widgetSync(); widgetPull();
+// 1ª abertura: pede a permissão de notificação (Android 13+) para os lembretes
+scheduleReminders(!S.settings.rem.asked).then(() => { if (!S.settings.rem.asked && LN) { S.settings.rem.asked = true; persist(); } });
+sheetSoon(800);

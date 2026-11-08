@@ -4,8 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#000000">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
 <title>GranaGo</title>
+<script>
+// aplica o tema antes de pintar a tela (evita "piscar" ao abrir)
+(function(){var t={};try{t=JSON.parse(localStorage.getItem('granago:theme')||'{}')||{}}catch(e){}
+var m=t.mode||'dark';if(t.auto&&window.matchMedia)m=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+var d=document.documentElement;d.setAttribute('data-theme',m);if(t.glass)d.setAttribute('data-glass','');})();
+</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -91,11 +97,11 @@
 </main>
 
 <nav class="tabs">
-  <button data-go="home" class="on"><i>🏠</i><span>Início</span></button>
-  <button data-go="tx"><i>📋</i><span>Lançamentos</span></button>
-  <button class="fab" id="fab" aria-label="Novo lançamento">＋</button>
-  <button data-go="cards"><i>💳</i><span>Cartões</span></button>
-  <button data-go="charts"><i>📊</i><span>Gráficos</span></button>
+  <button data-go="home" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 10.5 12 3.5l8.5 7"/><path d="M5.5 9v10.5a1 1 0 0 0 1 1h4v-6h3v6h4a1 1 0 0 0 1-1V9"/></svg><span>Início</span></button>
+  <button data-go="tx"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/></svg><span>Lançamentos</span></button>
+  <button class="fab" id="fab" aria-label="Novo lançamento"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button data-go="cards"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></svg><span>Cartões</span></button>
+  <button data-go="charts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="6.5" rx="1"/><rect x="10.5" y="6" width="3" height="11.5" rx="1"/><rect x="15.5" y="13.5" width="3" height="4" rx="1"/></svg><span>Gráficos</span></button>
 </nav>
 
 <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
@@ -239,6 +245,31 @@
 <dialog id="dlgSet" class="sheet"><div class="inner">
   <div class="grab"></div>
   <h2>Ajustes</h2>
+
+  <div class="set-h">Aparência</div>
+  <div class="themes">
+    <button type="button" class="theme-opt" data-look="dark"><span class="tpv" data-p="dark"><i></i><i></i><i></i><i></i></span><b>Escuro AMOLED</b><small>Preto puro · economiza bateria</small></button>
+    <button type="button" class="theme-opt" data-look="light"><span class="tpv" data-p="light"><i></i><i></i><i></i><i></i></span><b>Claro</b><small>Limpo e clássico</small></button>
+    <button type="button" class="theme-opt" data-look="glass-light"><span class="tpv" data-p="glass-light"><i></i><i></i><i></i><i></i></span><b>Liquid Glass claro</b><small>Vidro translúcido</small></button>
+    <button type="button" class="theme-opt" data-look="glass-dark"><span class="tpv" data-p="glass-dark"><i></i><i></i><i></i><i></i></span><b>Liquid Glass escuro</b><small>Vidro sobre fundo noturno</small></button>
+  </div>
+  <label class="sw"><span>Seguir o sistema <small>claro/escuro automático</small></span><input type="checkbox" id="themeAuto"></label>
+
+  <div class="set-h">Lembretes</div>
+  <label class="sw"><span>🔔 Lembrar de lançar os gastos <small>notificação no horário, mesmo com o app fechado</small></span><input type="checkbox" id="remOn"></label>
+  <div class="grid2">
+    <label class="fld"><small>Meio do dia</small><input type="time" id="remNoon"></label>
+    <label class="fld"><small>Fim do dia</small><input type="time" id="remNight"></label>
+  </div>
+  <label class="sw"><span>Pular se eu já lancei <small>não avisa se já houve lançamento no período</small></span><input type="checkbox" id="remSkip"></label>
+  <div class="qstatus" id="remInfo"></div>
+  <button class="btn ghost full" id="exactBtn" hidden>⏱️ Permitir horário exato</button>
+
+  <div class="set-h">Integrações</div>
+  <button class="menu" id="openSheet"><i>📗</i><span><b>Planilha Google (banco de dados)</b><small id="subSheet">Não conectada</small></span><em>›</em></button>
+  <button class="menu" id="openWidgets"><i>🧩</i><span><b>Widgets da tela inicial</b><small id="subWidgets">Saldo, gastos de hoje e cartão</small></span><em>›</em></button>
+
+  <div class="set-h">Lançamentos</div>
   <div class="fld"><small>Compras no crédito entram no mês…</small>
     <div class="seg" id="sMode"><button data-v="compra">da compra</button><button data-v="fatura">da fatura</button></div>
   </div>
@@ -251,6 +282,73 @@
   <button class="btn danger ghost full" id="sReset">Apagar todos os dados</button>
   <div class="ver" id="sVer"></div>
   <button class="btn full" data-close>Fechar</button>
+</div></dialog>
+
+<!-- ============ Planilha Google (banco de dados) ============ -->
+<dialog id="dlgSheet" class="sheet"><div class="inner">
+  <div class="grab"></div>
+  <h2>📗 Planilha Google</h2>
+  <p class="small" style="margin:0 2px;color:var(--soft)">Use uma planilha sua como banco de dados: tudo que você lança vai para ela, e o que você editar lá volta para o app (celular e PC ficam iguais). O app continua funcionando offline e envia quando a internet voltar.</p>
+  <div class="card" style="margin-top:12px" id="shStatusCard">
+    <div class="qstatus" id="shStatus" style="margin:0"></div>
+  </div>
+  <label class="fld"><small>Link do Apps Script da planilha (termina em /exec)</small><input id="shUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
+  <label class="fld"><small>Senha (opcional — só se você preencheu SENHA no código)</small><input id="shPass" type="password" autocomplete="off"></label>
+  <div class="row2" style="margin-top:6px">
+    <button class="btn ghost" id="shOpen" hidden>Abrir planilha</button>
+    <button class="btn" id="shSave">Conectar e sincronizar</button>
+  </div>
+  <button class="btn danger ghost full" id="shOff" hidden>Desconectar</button>
+
+  <div class="set-h">Como configurar (uma vez só)</div>
+  <ol class="steps">
+    <li>Crie uma planilha em branco em <b>sheets.new</b> (ou abra a que você quer usar).</li>
+    <li>Nela: <b>Extensões → Apps Script</b>. Apague o que estiver lá e cole o código abaixo → <b>Salvar</b>.</li>
+    <li><b>Implantar → Nova implantação → ⚙️ App da Web</b>. Executar como: <b>Eu</b> · Quem pode acessar: <b>Qualquer pessoa</b> → Implantar → autorize com sua conta.</li>
+    <li>Copie a <b>URL do app da Web</b> (termina em <code>/exec</code>) e cole no campo acima. Faça o mesmo no PC.</li>
+  </ol>
+  <button class="btn ghost full" id="shCopy">📋 Copiar código do Apps Script</button>
+  <p class="small muted" style="margin:10px 2px 0">As abas <b>Lançamentos, Bancos, Cartões e Categorias</b> são criadas sozinhas. Pode editar valores, descrições e categorias direto na planilha, apagar linhas ou adicionar novas — na próxima sincronização o app atualiza. A chave da IA não vai para a planilha.</p>
+  <button class="btn ghost full" data-close>Fechar</button>
+</div></dialog>
+
+<!-- ============ Widgets ============ -->
+<dialog id="dlgWidgets" class="sheet"><div class="inner">
+  <div class="grab"></div>
+  <h2>🧩 Widgets</h2>
+  <p class="small muted" style="margin:0 2px 10px">Acompanhe sem abrir o app e lance gastos direto da tela inicial.</p>
+  <div class="fld"><small>Tema dos widgets</small>
+    <div class="seg" id="wgTheme"><button data-v="dark">Escuro</button><button data-v="glass">Liquid Glass</button><button data-v="glasslight">Glass claro</button></div>
+  </div>
+  <div class="wg-card">
+    <div class="wg-wall"><div class="wg-prev">
+      <div class="wg-row"><span class="wg-ico">🐷</span><span class="grow"><small id="wgMonthLbl">SALDO DO MÊS</small><b id="wgBal">R$ 0,00</b></span></div>
+      <div class="wg-two"><span class="i">Receitas<b id="wgIn">R$ 0,00</b></span><span class="o">Despesas<b id="wgOut">R$ 0,00</b></span></div>
+      <div class="wg-bar"><i id="wgMonthBar"></i></div>
+      <div class="wg-btns"><span>＋ Despesa</span><span>🎙️ Falar</span><span>📷 Nota</span></div>
+    </div></div>
+    <button class="btn full" data-pin="month">＋ Adicionar à tela inicial</button>
+  </div>
+  <div class="wg-card">
+    <div class="wg-wall"><div class="wg-prev">
+      <div class="wg-row"><span class="wg-ico">📅</span><span class="grow"><small>GASTOS DE HOJE</small><b id="wgToday">R$ 0,00</b></span><b id="wgTodayN" style="font-size:13px;color:var(--wm)"></b></div>
+      <div class="wg-sub" id="wgLast1"></div><div class="wg-sub" id="wgLast2"></div>
+      <div class="wg-btns"><span>＋</span><span>💬</span><span>🎙️</span><span>📷</span></div>
+    </div></div>
+    <button class="btn full" data-pin="today">＋ Adicionar à tela inicial</button>
+  </div>
+  <div class="wg-card">
+    <div class="wg-wall"><div class="wg-prev">
+      <div class="wg-row"><span class="wg-logo" id="wgCLogo">Nu</span><span class="grow"><small id="wgCName">CARTÃO</small><b id="wgCInv">R$ 0,00</b></span><b style="font-size:20px;color:var(--wm)">›</b></div>
+      <div class="wg-sub" id="wgCDue"></div>
+      <div class="wg-bar"><i id="wgCBar"></i></div>
+      <div class="wg-two"><span>Disponível<b id="wgCAvail" style="color:var(--wi)">R$ 0,00</b></span><span style="text-align:right">Limite<b id="wgCLimit" style="color:var(--wi)">R$ 0,00</b></span></div>
+    </div></div>
+    <button class="btn full" data-pin="card">＋ Adicionar à tela inicial</button>
+  </div>
+  <p class="small muted" style="margin:6px 2px 0"><b>Tamanho:</b> segure o widget e arraste as bordas. A partir de 2x2 ele mostra a versão compacta; com 3 colunas ou mais, a completa. No widget do cartão, <b>›</b> passa para o próximo cartão.</p>
+  <p class="small muted" style="margin:8px 2px 0" id="wgHelp">Se o botão não funcionar no seu celular: segure um espaço vazio da tela inicial → <b>Widgets</b> → <b>GranaGo</b> e arraste o widget.</p>
+  <button class="btn ghost full" data-close>Fechar</button>
 </div></dialog>
 
 <!-- ============ Categoria ============ -->
